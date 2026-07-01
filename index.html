@@ -63,7 +63,39 @@ async function saveProduct(form){const fd=Object.fromEntries(new FormData(form))
 function csv(){const rows=[['Название','Категория','Закупка','Продажа','Штрихкод','Остаток','Размер','Пол','Поставщик','Завоз'],...state.products.map(p=>[p.name,p.cat,p.buy,p.sale,'="'+p.barcode+'"',p.qty,p.size,p.gender,p.supplierName,p.deliveryName])];download(new Blob(['\ufeff'+rows.map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(';')).join('\n')],{type:'text/csv'}),'ixsayz.csv')}
 function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 function printWin(html){const w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(()=>w.print(),400)}
-function printLabels(){const html=`<html><head><style>@page{size:43mm 25mm;margin:0}body{margin:0;font-family:Arial}.label{width:43mm;height:25mm;page-break-after:always;padding:2mm;box-sizing:border-box}b{font-size:8pt}.price{font-size:12pt;font-weight:bold}.code{text-align:center;font-size:8pt;margin-top:4mm}</style></head><body>${state.products.flatMap(p=>Array.from({length:+p.labelQty||+p.qty||1},()=>`<div class="label"><b>${esc(p.name)}</b><div class="price">${p.sale} ₽</div><div>Размер: ${esc(p.size)}</div><div class="code">${p.barcode}</div></div>`)).join('')}</body></html>`;printWin(html)}
+function ean13Svg(code){
+code=String(code||'').replace(/\D/g,'');
+if(!/^\d{13}$/.test(code))return `<div class="barcode-text">${esc(code)}</div>`;
+const L={0:'0001101',1:'0011001',2:'0010011',3:'0111101',4:'0100011',5:'0110001',6:'0101111',7:'0111011',8:'0110111',9:'0001011'};
+const G={0:'0100111',1:'0110011',2:'0011011',3:'0100001',4:'0011101',5:'0111001',6:'0000101',7:'0010001',8:'0001001',9:'0010111'};
+const R={0:'1110010',1:'1100110',2:'1101100',3:'1000010',4:'1011100',5:'1001110',6:'1010000',7:'1000100',8:'1001000',9:'1110100'};
+const P={0:'LLLLLL',1:'LLGLGG',2:'LLGGLG',3:'LLGGGL',4:'LGLLGG',5:'LGGLLG',6:'LGGGLL',7:'LGLGLG',8:'LGLGGL',9:'LGGLGL'};
+const d=code.split('').map(Number);
+let bits='101';
+for(let i=1;i<=6;i++)bits+=(P[d[0]][i-1]==='L'?L[d[i]]:G[d[i]]);
+bits+='01010';
+for(let i=7;i<=12;i++)bits+=R[d[i]];
+bits+='101';
+let bars='',x=0;
+for(let i=0;i<bits.length;i++){
+  if(bits[i]==='1')bars+=`<rect x="${x}" y="0" width="1" height="48"/>`;
+  x++;
+}
+return `<svg class="barcode" viewBox="0 0 95 62" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="95" height="62" fill="#fff"/>${bars}<text x="47.5" y="60" text-anchor="middle" font-family="Arial" font-size="9" fill="#000">${code}</text></svg>`;
+}
+function printLabels(){
+const html=`<html><head><style>
+@page{size:43mm 25mm;margin:0}
+body{margin:0;font-family:Arial;color:#000;background:#fff}
+.label{width:43mm;height:25mm;page-break-after:always;padding:1.6mm 2mm;box-sizing:border-box;text-align:center;overflow:hidden}
+.name{font-size:7.5pt;font-weight:bold;line-height:1.05;height:8mm;overflow:hidden}
+.price{font-size:12pt;font-weight:bold;line-height:1.1;margin-top:.4mm}
+.size{font-size:7.5pt;line-height:1.1;margin-top:.2mm}
+.barcode{width:37mm;height:10.5mm;margin-top:.6mm;display:block;margin-left:auto;margin-right:auto}
+.barcode-text{text-align:center;font-size:7pt;margin-top:2mm}
+</style></head><body>${state.products.flatMap(p=>Array.from({length:+p.labelQty||+p.qty||1},()=>`<div class="label"><div class="name">${esc(p.name)}</div><div class="price">${p.sale} ₽</div><div class="size">Размер: ${esc(p.size)}</div>${ean13Svg(p.barcode)}</div>`)).join('')}</body></html>`;
+printWin(html)
+}
 function printReport(){const html=`<html><body><h1>IXSAYZ Inventory</h1>${state.products.map(p=>`<div>${esc(p.name)} ${esc(p.size)} ${p.qty}шт ${p.sale}₽</div>`).join('')}</body></html>`;printWin(html)}
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.tab)return setTab(b.dataset.tab);try{const a=b.dataset.act,i=b.dataset.id;if(a==='newDelivery')deliveryForm();if(a==='openDelivery')setTab('delivery',{deliveryId:i});if(a==='editDelivery'){const d=state.deliveries.find(x=>x.id===i);deliveryForm(d);setTimeout(()=>$('#fDelivery').dataset.id=i)}if(a==='delDelivery'&&confirm('Удалить завоз?')){for(const p of dp(i))await del('products',p.id);for(const s of ds(i))await del('suppliers',s.id);await del('deliveries',i);await load()}if(a==='newSupplier')supplierForm();if(a==='openSupplier')setTab('supplier',{supplierId:i});if(a==='editSupplier'){const s=state.suppliers.find(x=>x.id===i);supplierForm(s);setTimeout(()=>$('#fSupplier').dataset.id=i)}if(a==='delSupplier'&&confirm('Удалить поставщика?')){for(const p of sp(i))await del('products',p.id);await del('suppliers',i);await load()}if(a==='newProduct')productForm();if(a==='editProduct'){const p=state.products.find(x=>x.id===i);productForm(p);setTimeout(()=>$('#fProduct').dataset.id=i)}if(a==='delProduct'&&confirm('Удалить товар?')){await del('products',i);await load()}if(a==='csv')csv();if(a==='printLabels')printLabels();if(a==='printReport')printReport()}catch(err){toast(err.message);console.error(err)}});
 document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,btn=f.querySelector('button[type=submit]');if(btn){btn.disabled=true;btn.textContent='Сохраняю...'}try{if(f.id==='fDelivery'){if(!f.name.value.trim())throw Error('Напиши название завоза');await saveDelivery(f)}if(f.id==='fSupplier'){if(!f.name.value.trim())throw Error('Напиши поставщика');await saveSupplier(f)}if(f.id==='fProduct'){if(!f.name.value.trim())throw Error('Напиши название товара');await saveProduct(f)}}catch(err){toast(err.message);console.error(err)}finally{if(btn){btn.disabled=false;btn.textContent='Сохранить'}}});
