@@ -1,5 +1,0 @@
-﻿root=C:\Users\magf5\Documents\Codex\2026-07-01\pwa-pdf-ixsayz-inventory-1-2\work\ixsayz-clean
-server=1696
-edge=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe exists=True
-url=http://127.0.0.1:8124/test.html
-edgeExit= outLen=0
